@@ -64,7 +64,7 @@ func (mr *mekanoRepository) Payment(file string) ([]MekanoDataStruct, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var paymentDataSlice []MekanoDataStruct
-	var consecutive int = 0
+	var consecutive, rowCount int = 0, 0
 
 	xlsx, err := excelize.OpenFile(file)
 	if err != nil {
@@ -83,14 +83,14 @@ func (mr *mekanoRepository) Payment(file string) ([]MekanoDataStruct, error) {
 		return nil, err
 	}
 
-	for i, row := range excelRows[1:] {
-
-		consecutive = c.Consecutive + i + 1
+	for _, row := range excelRows[1:] {
+		rowCount++
+		consecutive = c.Consecutive + rowCount
 
 		paymentData := MekanoDataStruct{
 			Tipo:          "RC",
 			Prefijo:       "_",
-			Numero:        strconv.Itoa(consecutive + i),
+			Numero:        strconv.Itoa(consecutive),
 			Secuencia:     "",
 			Fecha:         row[4],
 			Cuenta:        "13050501",
@@ -143,14 +143,13 @@ func (mr *mekanoRepository) Payment(file string) ([]MekanoDataStruct, error) {
 	}
 	exporterFile(paymentDataSlice)
 
-	mr.dr.SavePayment(ctx, Payment{Consecutive: consecutive, CreateAt: time.Now().Format("2006-01-02"), FileName: file})
-
-	PaymentStatistics(file, paymentDataSlice, c.Consecutive, consecutive)
+	PaymentStatistics(file, paymentDataSlice, c.Consecutive, consecutive, ctx, mr.dr)
 	return paymentDataSlice, nil
 }
 
 func (mr *mekanoRepository) Billing(file string, extras string) ([]MekanoDataStruct, error) {
-
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	var montoBaseFinal float64
 	var montoIvaFinal float64
 	var montoDebitoFinal float64
@@ -419,7 +418,7 @@ func (mr *mekanoRepository) Billing(file string, extras string) ([]MekanoDataStr
 	}
 
 	exporterFile(BillingDataSheet)
-	BillingStatistics(BillingDataSheet)
+	BillingStatistics(BillingDataSheet, mr.dr, ctx, file)
 	return BillingDataSheet, nil
 }
 
@@ -481,7 +480,7 @@ type billingStatistics struct {
 	Base    float64 `json:"base"`
 }
 
-func PaymentStatistics(fileName string, data []MekanoDataStruct, initialRC, lastRC int) {
+func PaymentStatistics(fileName string, data []MekanoDataStruct, initialRC, lastRC int, ctx context.Context, dr DatabaseRepositoryInterface) {
 
 	var efectivo, bancolombia, davivienda, susuerte, payU, total int = 0, 0, 0, 0, 0, 0
 
@@ -520,6 +519,11 @@ func PaymentStatistics(fileName string, data []MekanoDataStruct, initialRC, last
 	if err != nil {
 		log.Println(err)
 	}
+
+	err = dr.SavePayment(ctx, Payment{Consecutive: lastRC, CreateAt: time.Now().Format("2006-01-02"), FileName: fileName})
+	if err != nil {
+		log.Println(err)
+	}
 	log.Println(string(result))
 
 }
@@ -528,7 +532,7 @@ var (
 	d, c, b float64 = 0, 0, 0
 )
 
-func BillingStatistics(data []MekanoDataStruct) {
+func BillingStatistics(data []MekanoDataStruct, dr DatabaseRepositoryInterface, ctx context.Context, fileName string) {
 
 	for _, row := range data {
 		debito, _ := strconv.ParseFloat(row.Debito, 64)
@@ -546,6 +550,11 @@ func BillingStatistics(data []MekanoDataStruct) {
 	}
 
 	result, err := json.Marshal(bs)
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = dr.SaveBilling(ctx, Billing{Debit: int(d), Credit: int(c), Base: int(b), FileName: fileName, CreateAt: time.Now().Format("2006-01-02")})
 	if err != nil {
 		log.Println(err)
 	}
