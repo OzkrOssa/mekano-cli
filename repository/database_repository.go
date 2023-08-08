@@ -18,8 +18,8 @@ type Billing struct {
 	Debit    int
 	Credit   int
 	Base     int
-	FileName string
 	CreateAt string
+	FileName string
 }
 
 type DatabaseRepositoryInterface interface {
@@ -106,7 +106,7 @@ func (r *DatabaseRepository) SavePayment(ctx context.Context, payment Payment) e
 
 func (r *DatabaseRepository) SaveBilling(ctx context.Context, billing Billing) error {
 	// Implementa la lógica para guardar datos de facturación en la base de datos
-	insertSQL := "INSERT INTO mekanobilling (debit, credit, base, file_name, create_at) VALUES (?,?,?,?,?)"
+	insertSQL := "INSERT INTO mekanobilling (debit, credit, base, create_at, file_name, ) VALUES (?,?,?,?,?)"
 
 	stmt, err := r.db.PrepareContext(ctx, insertSQL)
 
@@ -115,7 +115,7 @@ func (r *DatabaseRepository) SaveBilling(ctx context.Context, billing Billing) e
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, billing.Debit, billing.Credit, billing.Base, billing.FileName, billing.CreateAt)
+	_, err = stmt.ExecContext(ctx, billing.Debit, billing.Credit, billing.Base, billing.CreateAt, billing.FileName)
 	if err != nil {
 		return err
 	}
